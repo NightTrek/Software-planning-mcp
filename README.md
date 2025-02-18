@@ -1,4 +1,5 @@
 # Software Planning Tool 🚀
+[![smithery badge](https://smithery.ai/badge/@NightTrek/Software-planning-mcp)](https://smithery.ai/server/@NightTrek/Software-planning-mcp)
 
 A Model Context Protocol (MCP) server designed to facilitate software development planning through an interactive, structured approach. This tool helps break down complex software projects into manageable tasks, track implementation progress, and maintain detailed development plans.
 
@@ -12,6 +13,15 @@ A Model Context Protocol (MCP) server designed to facilitate software developmen
 
 ## Installation 🛠️
 
+### Installing via Smithery
+
+To install Software Planning Tool for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@NightTrek/Software-planning-mcp):
+
+```bash
+npx -y @smithery/cli install @NightTrek/Software-planning-mcp --client claude
+```
+
+### Manual Installation
 1. Clone the repository
 2. Install dependencies:
 ```bash
