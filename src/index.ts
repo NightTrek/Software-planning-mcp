@@ -8,6 +8,7 @@ import {
   ListToolsRequestSchema,
   McpError,
   ReadResourceRequestSchema,
+  ListResourceTemplatesRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { storage } from './storage.js';
 import { SEQUENTIAL_THINKING_PROMPT, formatPlanAsTodos } from './prompts.js';
@@ -33,7 +34,7 @@ class SoftwarePlanningServer {
 
     this.setupResourceHandlers();
     this.setupToolHandlers();
-    
+
     this.server.onerror = (error) => console.error('[MCP Error]', error);
   }
 
@@ -53,6 +54,10 @@ class SoftwarePlanningServer {
           mimeType: 'application/json',
         },
       ],
+    }));
+
+    this.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({
+      resourceTemplates: [],
     }));
 
     this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
