@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
+import crypto from 'crypto';
 import { StorageData, Goal, ImplementationPlan, Todo } from './types.js';
 
 export class Storage {
@@ -26,22 +27,8 @@ export class Storage {
   }
 
   async initialize(): Promise<void> {
-    // FIXME [HIGH][CONFIDENCE: 90%][RELIABILITY, OBSERVABILITY]
-    // What: Storage initialization failures are silently caught and ignored
-    // Why: catch block doesn't distinguish between "file not found" (expected) vs I/O errors (critical)
-    // Impact: Users unaware of permission errors, disk full, or corrupted data; silent failure
-    // Fix: Check error type; log errors; throw on critical failures (permissions, disk full)
-    // File: src/storage.ts:20-33
-    // Patch:
-    // + } catch (error: any) {
-    // +   if (error.code === 'ENOENT') {
-    // +     // File doesn't exist yet - expected on first run
-    // +     await this.save();
-    // +   } else {
-    // +     console.error('Storage initialization failed:', error);
-    // +     throw new Error(`Failed to initialize storage: ${error.message}`);
-    // +   }
-    // + }
+    // FIXED [HIGH][FX-INIT] - Added proper error handling for storage initialization
+    // Distinguishes between expected errors (file not found) and critical failures (permissions, disk full, corrupted data)
     try {
       // Create data directory if it doesn't exist
       const dataDir = path.dirname(this.storagePath);
@@ -50,43 +37,57 @@ export class Storage {
       // Try to read existing data
       const data = await fs.readFile(this.storagePath, 'utf-8');
       this.data = JSON.parse(data);
-    } catch (error) {
-      // If file doesn't exist or can't be read, use default empty data
-      await this.save();
+    } catch (error: any) {
+      // ENOENT means file doesn't exist yet - this is expected on first run
+      if (error.code === 'ENOENT') {
+        console.error('[Storage] No existing data file, creating new storage at:', this.storagePath);
+        await this.save();
+        return;
+      }
+
+      // EACCES means permission denied - critical error
+      if (error.code === 'EACCES') {
+        console.error('[Storage] Permission denied accessing storage:', this.storagePath);
+        throw new Error(`Cannot access storage location: permission denied. Check permissions for ${this.storagePath}`);
+      }
+
+      // JSON parse error - corrupted data
+      if (error instanceof SyntaxError) {
+        console.error('[Storage] Corrupted storage file detected, backing up and creating new storage');
+        const backupPath = `${this.storagePath}.backup.${Date.now()}`;
+        try {
+          await fs.rename(this.storagePath, backupPath);
+          console.error(`[Storage] Backup created at: ${backupPath}`);
+        } catch (backupError) {
+          console.error('[Storage] Failed to create backup:', backupError);
+        }
+        await this.save();
+        return;
+      }
+
+      // Other errors - log and re-throw
+      console.error('[Storage] Initialization failed:', error);
+      throw new Error(`Storage initialization failed: ${error.message}`);
     }
   }
 
   private async save(): Promise<void> {
-    // FIXME [HIGH][CONFIDENCE: 90%][RELIABILITY]
-    // What: File write failures are not caught or handled
-    // Why: No try-catch or error propagation for writeFile operations
-    // Impact: Silent data loss when disk full, permissions denied, or I/O errors occur
-    // Fix: Wrap in try-catch, log errors, return boolean success indicator or throw
-    // File: src/storage.ts:35-37
-    // Patch:
-    // + try {
-    // +   await fs.writeFile(this.storagePath, JSON.stringify(this.data, null, 2));
-    // + } catch (error: any) {
-    // +   console.error('Failed to save storage:', error);
-    // +   throw new Error(`Storage save failed: ${error.message}`);
-    // + }
-    await fs.writeFile(this.storagePath, JSON.stringify(this.data, null, 2));
+    // FIXED [HIGH][FX-002] - Added error handling for file write operations
+    // Catches and reports I/O errors (disk full, permissions, etc.) instead of failing silently
+    try {
+      await fs.writeFile(this.storagePath, JSON.stringify(this.data, null, 2));
+    } catch (error: any) {
+      console.error('[Storage] Failed to save:', error.message);
+      throw new Error(`Storage save failed: ${error.message}`);
+    }
   }
 
   async createGoal(description: string): Promise<Goal> {
-    // FIXME [CRITICAL][CONFIDENCE: 95%][BUG, RELIABILITY]
-    // What: Using Date.now().toString() for ID generation creates collision risk
-    // Why: Multiple rapid calls in same millisecond generate identical IDs
-    // Impact: Data corruption, overwriting existing goals, loss of user data
-    // Fix: Use crypto.randomUUID() for cryptographically secure unique IDs
-    // File: src/storage.ts:39-49
+    // FIXED [CRITICAL][FX-001] - Replaced Date.now() with crypto.randomUUID()
+    // Using cryptographically secure UUID v4 to prevent ID collisions
     // Provenance: SRC-001 (Node.js crypto.randomUUID())
-    // Patch:
-    // + import crypto from 'crypto';
-    // - id: Date.now().toString(),
-    // + id: crypto.randomUUID(),
     const goal: Goal = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       description,
       createdAt: new Date().toISOString(),
     };
@@ -125,19 +126,11 @@ export class Storage {
       throw new Error(`No plan found for goal ${goalId}`);
     }
 
-    // FIXME [CRITICAL][CONFIDENCE: 95%][BUG, RELIABILITY]
-    // What: Using Date.now().toString() for ID generation creates collision risk
-    // Why: Multiple rapid calls in same millisecond generate identical IDs
-    // Impact: Data corruption, overwriting existing todos, duplicate IDs in array
-    // Fix: Use crypto.randomUUID() for cryptographically secure unique IDs
-    // File: src/storage.ts:71-95
+    // FIXED [CRITICAL][FX-001] - Replaced Date.now() with crypto.randomUUID()
+    // Using cryptographically secure UUID v4 to prevent ID collisions
     // Provenance: SRC-001 (Node.js crypto.randomUUID())
-    // Patch:
-    // + import crypto from 'crypto';
-    // - id: Date.now().toString(),
-    // + id: crypto.randomUUID(),
     const todo: Todo = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       title,
       description,
       complexity,
