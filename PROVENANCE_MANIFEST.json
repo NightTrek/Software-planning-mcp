@@ -1,0 +1,100 @@
+{
+  "manifestVersion": "1.0",
+  "generatedAt": "2025-11-10T16:53:00Z",
+  "repository": "Software-planning-mcp",
+  "purpose": "Track external sources and licensed code used in this project",
+  "sources": [
+    {
+      "id": "SRC-001",
+      "purpose": "UUID v4 generation for entity IDs to replace collision-prone Date.now() timestamps",
+      "url": "https://nodejs.org/api/crypto.html#cryptorandomuuidoptions",
+      "license": "Node.js (MIT-compatible)",
+      "project": "Node.js Core",
+      "versionOrSHA": "v22.21.1",
+      "snippetHash": "N/A - built-in API, no code copying required",
+      "usedInFiles": ["src/storage.ts"],
+      "integrationNotes": "Replace Date.now().toString() with crypto.randomUUID() at lines 41 and 81 in src/storage.ts. Requires adding 'import crypto from \"crypto\";' at top of file. No external dependencies needed as this is Node.js built-in from v14.17.0+.",
+      "confidence": 100,
+      "implemented": false,
+      "references": [
+        "https://developer.mozilla.org/en-US/docs/Web/API/Crypto/randomUUID",
+        "https://nodejs.org/dist/latest-v22.x/docs/api/crypto.html"
+      ]
+    },
+    {
+      "id": "SRC-002",
+      "purpose": "Input validation patterns for user-provided strings (goals, todos, plans)",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html",
+      "license": "CC BY-SA 4.0 (documentation/pattern reference only - no code directly copied)",
+      "project": "OWASP Cheat Sheet Series",
+      "versionOrSHA": "2025",
+      "snippetHash": "N/A - pattern-based clean-room implementation, not direct code reuse",
+      "usedInFiles": ["src/index.ts (proposed validation functions)"],
+      "integrationNotes": "Implement validation functions following OWASP best practices: string length checks (1-500 chars for goals, 1-5000 for descriptions, 1-200 for titles), whitespace trimming, numeric range validation (0-10 for complexity), type checking. This is a pattern-based implementation guided by OWASP principles, not copied code. The actual implementation is original work.",
+      "confidence": 95,
+      "implemented": false,
+      "references": [
+        "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html",
+        "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/README"
+      ],
+      "notes": "OWASP documentation is used as a reference for security patterns. No actual code from OWASP is used. Our implementation is original but follows industry-standard validation practices as documented by OWASP."
+    },
+    {
+      "id": "SRC-003",
+      "purpose": "Testing framework for unit and integration tests",
+      "url": "https://github.com/vitest-dev/vitest",
+      "license": "MIT",
+      "project": "vitest-dev/vitest",
+      "versionOrSHA": "latest stable (recommend ^1.0.0 or later)",
+      "snippetHash": "N/A - npm package dependency",
+      "usedInFiles": ["package.json (devDependencies)", "vitest.config.ts (proposed)", "src/**/*.test.ts (proposed test files)"],
+      "integrationNotes": "Add Vitest as dev dependency via 'pnpm add -D vitest @vitest/ui @vitest/coverage-v8'. Configure for Node.js + TypeScript environment. Create test files following Vitest conventions. See FX-012 in FIX_QUEUE.json for detailed implementation plan.",
+      "confidence": 95,
+      "implemented": false,
+      "references": [
+        "https://vitest.dev/guide/",
+        "https://github.com/vitest-dev/vitest/blob/main/LICENSE"
+      ],
+      "packageInfo": {
+        "name": "vitest",
+        "type": "devDependency",
+        "installCommand": "pnpm add -D vitest @vitest/ui"
+      }
+    }
+  ],
+  "additionalLicenses": [
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "version": "0.6.0",
+      "license": "MIT",
+      "purpose": "Core MCP protocol implementation",
+      "alreadyInUse": true,
+      "reference": "https://github.com/modelcontextprotocol/sdk"
+    },
+    {
+      "name": "TypeScript",
+      "version": "^5.3.3",
+      "license": "Apache-2.0",
+      "purpose": "TypeScript compiler and type system",
+      "alreadyInUse": true,
+      "reference": "https://github.com/microsoft/TypeScript"
+    }
+  ],
+  "thirdPartyNoticesLocation": "THIRD_PARTY_NOTICES.md",
+  "complianceNotes": [
+    "All sourced materials are either MIT, Apache-2.0, BSD, ISC, or CC BY-SA 4.0 (documentation only)",
+    "Node.js built-in APIs (crypto.randomUUID) require no attribution beyond standard Node.js license",
+    "OWASP Cheat Sheets are CC BY-SA 4.0 but only used as pattern reference, not direct code reuse",
+    "All dependencies listed in package.json include their own LICENSE files in node_modules",
+    "No GPL, LGPL, or proprietary code is used",
+    "All implementations based on external patterns are clean-room rewrites"
+  ],
+  "auditTrail": [
+    {
+      "date": "2025-11-10",
+      "action": "Initial provenance manifest created during repository stabilization audit",
+      "auditor": "Engineering Team (Automated Analysis)",
+      "findings": "3 external sources identified, all with permissive licenses compatible with MIT project license"
+    }
+  ]
+}

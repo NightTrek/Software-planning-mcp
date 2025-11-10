@@ -1,0 +1,624 @@
+{
+  "version": "1.0",
+  "generated": "2025-11-10T16:53:00Z",
+  "repository": "Software-planning-mcp",
+  "totalIssues": 20,
+  "criticalIssues": 2,
+  "highIssues": 6,
+  "mediumIssues": 10,
+  "lowIssues": 2,
+  "queue": [
+    {
+      "id": "FX-001",
+      "order": 1,
+      "severity": "CRITICAL",
+      "confidence": 95,
+      "tags": ["BUG", "RELIABILITY"],
+      "file": "src/storage.ts",
+      "lines": [41, 81],
+      "title": "Replace Date.now() ID generation with UUID",
+      "description": "Using Date.now().toString() for ID generation creates collision risk when multiple operations occur in the same millisecond. This can cause data corruption and loss of user data.",
+      "patch": "import crypto from 'crypto';\n\n// In createGoal() line 41:\n- id: Date.now().toString(),\n+ id: crypto.randomUUID(),\n\n// In addTodo() line 81:\n- id: Date.now().toString(),\n+ id: crypto.randomUUID(),",
+      "tests": [
+        "Create unit test that calls createGoal() twice rapidly and verifies unique IDs",
+        "Create unit test that adds multiple todos in quick succession and verifies unique IDs",
+        "Verify IDs are valid UUID v4 format"
+      ],
+      "commands": [
+        "# Apply the fix",
+        "# 1. Add import at top of src/storage.ts:",
+        "import crypto from 'crypto';",
+        "",
+        "# 2. Build and test:",
+        "pnpm run build",
+        "node -e \"const crypto = require('crypto'); console.log('UUID test:', crypto.randomUUID());\""
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "All IDs generated are valid UUID v4 format",
+        "No ID collisions occur even under rapid operation",
+        "Build succeeds without errors",
+        "Existing functionality remains intact"
+      ],
+      "provenance": ["SRC-001"]
+    },
+    {
+      "id": "FX-002",
+      "order": 2,
+      "severity": "HIGH",
+      "confidence": 90,
+      "tags": ["RELIABILITY"],
+      "file": "src/storage.ts",
+      "lines": [35, 37],
+      "title": "Add error handling to storage save operations",
+      "description": "The save() method can fail due to disk full, permissions, or I/O errors, but failures are not caught or communicated to users. This results in silent data loss.",
+      "patch": "private async save(): Promise<void> {\n  try {\n    await fs.writeFile(this.storagePath, JSON.stringify(this.data, null, 2));\n  } catch (error: any) {\n    console.error('[Storage] Failed to save:', error.message);\n    throw new Error(`Storage save failed: ${error.message}`);\n  }\n}",
+      "tests": [
+        "Mock fs.writeFile to throw EACCES error and verify error is propagated",
+        "Mock fs.writeFile to throw ENOSPC error and verify error message",
+        "Verify successful saves still work correctly"
+      ],
+      "commands": [
+        "pnpm run build",
+        "# Test with read-only directory (manual test):",
+        "mkdir /tmp/test-storage",
+        "chmod 444 /tmp/test-storage",
+        "STORAGE_PATH=/tmp/test-storage node build/index.js"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "Save errors are caught and logged to stderr",
+        "Errors propagate to calling code with descriptive messages",
+        "Build succeeds",
+        "Normal save operations unaffected"
+      ],
+      "provenance": []
+    },
+    {
+      "id": "FX-003",
+      "order": 3,
+      "severity": "HIGH",
+      "confidence": 85,
+      "tags": ["SECURITY", "BUG"],
+      "file": "src/index.ts",
+      "lines": [215, 237, 262],
+      "title": "Add comprehensive input validation for all tool parameters",
+      "description": "User inputs (goal, plan, todo fields) are not validated or sanitized. This allows empty strings, extremely long inputs, out-of-range values, and potentially malicious content.",
+      "patch": "// Create validation helper functions:\n\nfunction validateGoal(goal: string): string {\n  if (!goal || typeof goal !== 'string') {\n    throw new McpError(ErrorCode.InvalidParams, 'Goal must be a non-empty string');\n  }\n  const trimmed = goal.trim();\n  if (trimmed.length === 0) {\n    throw new McpError(ErrorCode.InvalidParams, 'Goal description cannot be empty');\n  }\n  if (trimmed.length > 500) {\n    throw new McpError(ErrorCode.InvalidParams, 'Goal description too long (max 500 characters)');\n  }\n  return trimmed;\n}\n\nfunction validateTodo(todo: any): void {\n  if (!todo.title?.trim()) {\n    throw new McpError(ErrorCode.InvalidParams, 'Todo title cannot be empty');\n  }\n  if (todo.title.length > 200) {\n    throw new McpError(ErrorCode.InvalidParams, 'Todo title too long (max 200 characters)');\n  }\n  if (!todo.description?.trim()) {\n    throw new McpError(ErrorCode.InvalidParams, 'Todo description cannot be empty');\n  }\n  if (todo.description.length > 5000) {\n    throw new McpError(ErrorCode.InvalidParams, 'Todo description too long (max 5000 characters)');\n  }\n  if (typeof todo.complexity !== 'number' || todo.complexity < 0 || todo.complexity > 10) {\n    throw new McpError(ErrorCode.InvalidParams, 'Complexity must be a number between 0 and 10');\n  }\n  if (todo.codeExample && todo.codeExample.length > 10000) {\n    throw new McpError(ErrorCode.InvalidParams, 'Code example too long (max 10000 characters)');\n  }\n}\n\n// In start_planning handler:\nconst validatedGoal = validateGoal(request.params.arguments.goal);\nthis.currentGoal = await storage.createGoal(validatedGoal);\n\n// In add_todo handler:\nconst todo = request.params.arguments;\nvalidateTodo(todo);\nconst newTodo = await storage.addTodo(this.currentGoal.id, {\n  title: todo.title.trim(),\n  description: todo.description.trim(),\n  complexity: todo.complexity,\n  codeExample: todo.codeExample?.trim()\n});",
+      "tests": [
+        "Test empty goal string throws InvalidParams error",
+        "Test goal > 500 chars throws error",
+        "Test whitespace-only goal throws error",
+        "Test empty todo title throws error",
+        "Test complexity < 0 throws error",
+        "Test complexity > 10 throws error",
+        "Test complexity non-number throws error",
+        "Test valid inputs pass validation"
+      ],
+      "commands": [
+        "pnpm run build",
+        "# Manual testing with inspector:",
+        "pnpm run inspector"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "All user inputs are validated before processing",
+        "Descriptive error messages guide users on what went wrong",
+        "Valid inputs continue to work correctly",
+        "Edge cases (null, undefined, whitespace) are handled"
+      ],
+      "provenance": ["SRC-002"]
+    },
+    {
+      "id": "FX-004",
+      "order": 4,
+      "severity": "MEDIUM",
+      "confidence": 100,
+      "tags": ["RELIABILITY"],
+      "file": "src/index.ts",
+      "lines": [18],
+      "title": "Persist currentGoal state or make operations stateless",
+      "description": "currentGoal is in-memory only and lost on server restart. Users lose context mid-session and must manually restart planning.",
+      "patch": "Option 1 (Recommended - Persist state):\n\n// In storage.ts, add to StorageData interface:\nexport interface StorageData {\n  goals: Record<string, Goal>;\n  plans: Record<string, ImplementationPlan>;\n  currentGoalId: string | null;  // NEW\n}\n\n// In Storage class:\nasync setCurrentGoal(goalId: string | null): Promise<void> {\n  this.data.currentGoalId = goalId;\n  await this.save();\n}\n\nasync getCurrentGoalId(): Promise<string | null> {\n  return this.data.currentGoalId || null;\n}\n\n// In index.ts constructor:\nasync initialize(): Promise<void> {\n  const currentGoalId = await storage.getCurrentGoalId();\n  if (currentGoalId) {\n    this.currentGoal = await storage.getGoal(currentGoalId);\n  }\n}\n\n// Update start_planning handler:\nthis.currentGoal = await storage.createGoal(validatedGoal);\nawait storage.createPlan(this.currentGoal.id);\nawait storage.setCurrentGoal(this.currentGoal.id);  // NEW\n\nOption 2 (Stateless - more complex, requires API changes):\n// Add goalId parameter to all tools and remove currentGoal",
+      "tests": [
+        "Start planning, restart server, verify currentGoal is restored",
+        "Start multiple planning sessions, verify latest is current",
+        "Verify null state on first run"
+      ],
+      "commands": [
+        "pnpm run build",
+        "# Test persistence:",
+        "node build/index.js &",
+        "# Use inspector to start planning",
+        "# Kill server",
+        "# Restart and verify goal is restored"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "Current goal persists across server restarts",
+        "No data loss on unexpected termination",
+        "Initialization loads persisted state",
+        "All existing functionality works"
+      ],
+      "provenance": []
+    },
+    {
+      "id": "FX-005",
+      "order": 5,
+      "severity": "MEDIUM",
+      "confidence": 100,
+      "tags": ["BUG"],
+      "file": "src/prompts.ts",
+      "lines": [64, 95],
+      "title": "Improve plan parsing robustness and error reporting",
+      "description": "formatPlanAsTodos() uses fragile regex matching that fails on common markdown variations. No feedback when parsing fails.",
+      "patch": "export const formatPlanAsTodos = (plan: string): Array<{\n  title: string;\n  description: string;\n  complexity: number;\n  codeExample?: string;\n  parseWarnings?: string[];\n}> => {\n  const warnings: string[] = [];\n  const sections = plan.split(/\\n\\s*\\n/).filter(s => s.trim().length > 0);\n  \n  if (sections.length === 0) {\n    warnings.push('Plan appears to be empty or improperly formatted');\n  }\n  \n  const todos = sections.map((section, index) => {\n    const lines = section.split('\\n');\n    \n    // Try multiple title patterns\n    let title = lines[0]\n      .replace(/^[0-9]+[\\.\\)]\\s*/, '')  // Numbered: 1. or 1)\n      .replace(/^[\\-\\*\\+]\\s*/, '')       // Bullets: -, *, +\n      .replace(/^#+\\s*/, '')              // Headers: ##\n      .trim();\n    \n    if (!title) {\n      title = `Unnamed Task ${index + 1}`;\n      warnings.push(`Section ${index + 1} has no clear title`);\n    }\n    \n    // Try multiple complexity patterns\n    const complexityMatches = [\n      /Complexity:\\s*([0-9]+)/i,\n      /\\[Complexity:\\s*([0-9]+)\\]/i,\n      /\\(complexity:\\s*([0-9]+)\\)/i,\n      /difficulty:\\s*([0-9]+)/i\n    ];\n    \n    let complexity = 5; // default\n    for (const pattern of complexityMatches) {\n      const match = section.match(pattern);\n      if (match) {\n        complexity = Math.max(0, Math.min(10, parseInt(match[1])));\n        break;\n      }\n    }\n    \n    // Extract code blocks (fenced or indented)\n    const fencedCode = section.match(/```[^`]*```/)?.[0];\n    const indentedCode = section.match(/(^    .+$\\n)+/m)?.[0];\n    const codeExample = (fencedCode || indentedCode)?.replace(/^```|```$/g, '').trim();\n    \n    // Build description\n    let description = section\n      .replace(/^[^\\n]*\\n/, '')  // Remove title line\n      .replace(/Complexity:\\s*[0-9]+/gi, '')\n      .replace(/```[^`]*```/g, '')\n      .trim();\n    \n    if (!description) {\n      description = title;  // Fallback to title if no description\n      warnings.push(`Section \"${title}\" has no description`);\n    }\n    \n    return {\n      title,\n      description,\n      complexity,\n      codeExample,\n      parseWarnings: warnings.length > 0 ? [...warnings] : undefined\n    };\n  });\n  \n  return todos;\n};",
+      "tests": [
+        "Test numbered list format (1. Title)",
+        "Test bullet list format (- Title)",
+        "Test header format (## Title)",
+        "Test various complexity formats",
+        "Test fenced code blocks",
+        "Test indented code blocks",
+        "Test missing titles/descriptions",
+        "Test empty plan",
+        "Verify warnings are returned"
+      ],
+      "commands": [
+        "pnpm run build",
+        "# Create test plans with various formats",
+        "# Use inspector to test save_plan with different formats"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "Parser handles common markdown variations",
+        "Warnings are returned for ambiguous sections",
+        "No silent failures",
+        "Backwards compatible with existing format"
+      ],
+      "provenance": []
+    },
+    {
+      "id": "FX-006",
+      "order": 6,
+      "severity": "HIGH",
+      "confidence": 80,
+      "tags": ["RELIABILITY"],
+      "file": "src/index.ts",
+      "lines": [216, 217, 240, 242],
+      "title": "Add atomic operations for multi-step storage changes",
+      "description": "Operations like createGoal+createPlan and loop of addTodo are not atomic. Partial failures leave inconsistent state.",
+      "patch": "// In storage.ts, add transaction support:\n\nprivate dataSnapshot: StorageData | null = null;\n\nbeginTransaction(): void {\n  this.dataSnapshot = JSON.parse(JSON.stringify(this.data));\n}\n\ncommitTransaction(): void {\n  this.dataSnapshot = null;\n}\n\nrollbackTransaction(): void {\n  if (this.dataSnapshot) {\n    this.data = this.dataSnapshot;\n    this.dataSnapshot = null;\n  }\n}\n\n// In index.ts start_planning handler:\ntry {\n  storage.beginTransaction();\n  this.currentGoal = await storage.createGoal(validatedGoal);\n  await storage.createPlan(this.currentGoal.id);\n  await storage.setCurrentGoal(this.currentGoal.id);\n  storage.commitTransaction();\n} catch (error) {\n  storage.rollbackTransaction();\n  throw error;\n}\n\n// In save_plan handler:\ntry {\n  storage.beginTransaction();\n  for (const todo of todos) {\n    await storage.addTodo(this.currentGoal.id, todo);\n  }\n  storage.commitTransaction();\n} catch (error) {\n  storage.rollbackTransaction();\n  throw new McpError(ErrorCode.InternalError, 'Failed to save todos: ' + error.message);\n}",
+      "tests": [
+        "Mock createPlan to fail and verify goal is not persisted",
+        "Mock addTodo to fail mid-loop and verify no partial todos saved",
+        "Verify successful operations still save correctly"
+      ],
+      "commands": [
+        "pnpm run build"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "Failed multi-step operations leave no partial state",
+        "Successful operations complete fully",
+        "Storage remains consistent on errors"
+      ],
+      "provenance": []
+    },
+    {
+      "id": "FX-007",
+      "order": 7,
+      "severity": "MEDIUM",
+      "confidence": 90,
+      "tags": ["BUG"],
+      "file": "src/index.ts",
+      "lines": [60, 83],
+      "title": "Fix MCP resource handlers to not depend on volatile state",
+      "description": "Resources reference currentGoal which can be null or change, causing race conditions and confusing errors.",
+      "patch": "// Option 1: Return all goals as resources\nthis.server.setRequestHandler(ListResourcesRequestSchema, async () => {\n  const allGoals = await storage.getAllGoals();  // Need to add this method\n  const resources = allGoals.map(goal => ({\n    uri: `planning://goal/${goal.id}`,\n    name: `Goal: ${goal.description.substring(0, 50)}`,\n    description: `Planning session: ${goal.description}`,\n    mimeType: 'application/json'\n  }));\n  \n  // Add current goal indicator if set\n  if (this.currentGoal) {\n    resources.unshift({\n      uri: 'planning://current-goal',\n      name: 'Current Active Goal',\n      description: 'The currently active planning session',\n      mimeType: 'application/json'\n    });\n  }\n  \n  return { resources };\n});\n\n// Option 2: Remove current-goal resource entirely and require goalId\n// (More work but cleaner architecture)",
+      "tests": [
+        "List resources with no active goal",
+        "List resources with active goal",
+        "Read goal resource by ID",
+        "Verify no race conditions"
+      ],
+      "commands": [
+        "pnpm run build"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "Resources listed are always accessible",
+        "No errors when currentGoal is null",
+        "Clear indication of current/active goal"
+      ],
+      "provenance": []
+    },
+    {
+      "id": "FX-008",
+      "order": 8,
+      "severity": "MEDIUM",
+      "confidence": 85,
+      "tags": ["RELIABILITY"],
+      "file": "src/storage.ts",
+      "lines": ["*"],
+      "title": "Add concurrency control to prevent data races",
+      "description": "Multiple concurrent operations can corrupt storage file due to lack of locking. Read-modify-write pattern is not atomic.",
+      "patch": "// Option 1: Add file locking (recommended for v0.2.0)\nimport lockfile from 'proper-lockfile';\n\nprivate async withLock<T>(fn: () => Promise<T>): Promise<T> {\n  const lockPath = this.storagePath + '.lock';\n  const release = await lockfile.lock(this.storagePath, {\n    retries: { retries: 5, minTimeout: 100 },\n    stale: 10000\n  });\n  try {\n    return await fn();\n  } finally {\n    await release();\n  }\n}\n\nprivate async save(): Promise<void> {\n  await this.withLock(async () => {\n    await fs.writeFile(this.storagePath, JSON.stringify(this.data, null, 2));\n  });\n}\n\n// Option 2: Use SQLite instead (recommended for v0.3.0)\n// Provides ACID guarantees natively",
+      "tests": [
+        "Spawn multiple concurrent operations and verify no corruption",
+        "Verify lock is released on errors",
+        "Test lock timeout/stale detection"
+      ],
+      "commands": [
+        "pnpm add proper-lockfile",
+        "pnpm run build"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "Concurrent operations do not corrupt storage",
+        "Locks are properly acquired and released",
+        "Performance degradation is acceptable"
+      ],
+      "provenance": [],
+      "deferReason": "Single-user MCP scenario makes this low priority for v0.1.0. Recommend for v0.2.0."
+    },
+    {
+      "id": "FX-009",
+      "order": 9,
+      "severity": "MEDIUM",
+      "confidence": 90,
+      "tags": ["DX"],
+      "file": "src/index.ts",
+      "lines": [62, 86, 230, 256, 280, 300, 320],
+      "title": "Improve error messages for better user experience",
+      "description": "Error messages are developer-focused and lack actionable guidance for users.",
+      "patch": "// Create error message helpers:\n\nconst ERROR_MESSAGES = {\n  NO_ACTIVE_GOAL: 'No planning session is currently active. Please use the start_planning tool with a goal description to begin.',\n  PLAN_NOT_FOUND: 'Implementation plan not found for the current goal. This may indicate a data corruption issue.',\n  TODO_NOT_FOUND: (id: string) => `Todo item with ID \"${id}\" was not found. Use get_todos to see all available todos.`,\n  INVALID_GOAL: 'Goal description must be a non-empty string between 1 and 500 characters.',\n  INVALID_TODO: 'Todo must include a non-empty title, description, and complexity (0-10).',\n};\n\n// Apply throughout handlers:\nif (!this.currentGoal) {\n  throw new McpError(ErrorCode.InvalidRequest, ERROR_MESSAGES.NO_ACTIVE_GOAL);\n}",
+      "tests": [
+        "Test each error condition and verify message is helpful",
+        "User testing to validate clarity"
+      ],
+      "commands": [
+        "pnpm run build"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "Error messages explain what went wrong",
+        "Error messages suggest how to fix the issue",
+        "Consistent tone and formatting"
+      ],
+      "provenance": []
+    },
+    {
+      "id": "FX-010",
+      "order": 10,
+      "severity": "MEDIUM",
+      "confidence": 95,
+      "tags": ["OBSERVABILITY"],
+      "file": "src/*.ts",
+      "lines": ["*"],
+      "title": "Add structured logging for operations and errors",
+      "description": "No structured logging exists except one stderr message. Impossible to diagnose issues or audit operations.",
+      "patch": "// For v0.1.0 - minimal console logging:\n\nfunction log(level: 'info' | 'error' | 'warn', message: string, data?: any): void {\n  const timestamp = new Date().toISOString();\n  const logData = data ? JSON.stringify(data) : '';\n  console.error(`[${timestamp}] [${level.toUpperCase()}] ${message} ${logData}`);\n}\n\n// Apply throughout:\nlog('info', 'Storage initialized', { path: this.storagePath });\nlog('info', 'Goal created', { id: goal.id, description: goal.description });\nlog('error', 'Storage save failed', { error: error.message });\n\n// For v0.2.0 - add pino:\nimport pino from 'pino';\nconst logger = pino({\n  level: process.env.LOG_LEVEL || 'info',\n  transport: process.env.NODE_ENV !== 'production' ? {\n    target: 'pino-pretty',\n    options: { colorize: true }\n  } : undefined\n});",
+      "tests": [
+        "Verify logs are written to stderr",
+        "Check log format is parseable",
+        "Test different log levels"
+      ],
+      "commands": [
+        "pnpm run build",
+        "node build/index.js 2>&1 | grep '\\[INFO\\]'"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "All major operations are logged",
+        "Errors include stack traces",
+        "Logs don't interfere with MCP stdio protocol"
+      ],
+      "provenance": [],
+      "deferReason": "Minimal logging sufficient for v0.1.0. Full structured logging recommended for v0.2.0."
+    },
+    {
+      "id": "FX-011",
+      "order": 11,
+      "severity": "MEDIUM",
+      "confidence": 85,
+      "tags": ["BUILD"],
+      "file": "tsconfig.json",
+      "lines": [7],
+      "title": "Enable additional TypeScript strict checks",
+      "description": "Could benefit from noUncheckedIndexedAccess and other strict flags to catch more potential runtime errors.",
+      "patch": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2020\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"esModuleInterop\": true,\n    \"strict\": true,\n    \"skipLibCheck\": true,\n    \"forceConsistentCasingInFileNames\": true,\n    \"outDir\": \"build\",\n    \"noUncheckedIndexedAccess\": true,\n    \"noImplicitOverride\": true,\n    \"noFallthroughCasesInSwitch\": true,\n    \"noUnusedLocals\": true,\n    \"noUnusedParameters\": true,\n    \"exactOptionalPropertyTypes\": true\n  },\n  \"include\": [\"src/**/*\"],\n  \"exclude\": [\"node_modules\"]\n}",
+      "tests": [
+        "Run build and fix any new errors",
+        "Verify stricter checks catch potential bugs"
+      ],
+      "commands": [
+        "# Update tsconfig.json",
+        "pnpm run build",
+        "# Fix any new TypeScript errors"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "TypeScript build succeeds with new flags",
+        "Code is updated to satisfy stricter checks",
+        "No runtime behavior changes"
+      ],
+      "provenance": []
+    },
+    {
+      "id": "FX-012",
+      "order": 12,
+      "severity": "MEDIUM",
+      "confidence": 100,
+      "tags": ["TESTING"],
+      "file": "N/A",
+      "lines": [],
+      "title": "Add comprehensive test suite with Vitest",
+      "description": "Zero tests exist. No confidence in code correctness or protection against regressions.",
+      "patch": "# 1. Install Vitest:\npnpm add -D vitest @vitest/ui\n\n# 2. Create vitest.config.ts:\nimport { defineConfig } from 'vitest/config';\n\nexport default defineConfig({\n  test: {\n    globals: true,\n    environment: 'node',\n    coverage: {\n      provider: 'v8',\n      reporter: ['text', 'html'],\n      exclude: ['build/**', 'node_modules/**']\n    }\n  }\n});\n\n# 3. Add test scripts to package.json:\n\"scripts\": {\n  \"test\": \"vitest run\",\n  \"test:watch\": \"vitest\",\n  \"test:ui\": \"vitest --ui\",\n  \"test:coverage\": \"vitest run --coverage\"\n}\n\n# 4. Create src/storage.test.ts:\nimport { describe, it, expect, beforeEach, afterEach } from 'vitest';\nimport { Storage } from './storage';\nimport fs from 'fs/promises';\nimport path from 'path';\nimport os from 'os';\n\ndescribe('Storage', () => {\n  let storage: Storage;\n  let testDir: string;\n\n  beforeEach(async () => {\n    testDir = path.join(os.tmpdir(), 'test-storage-' + Date.now());\n    process.env.STORAGE_PATH = testDir;\n    storage = new Storage();\n    await storage.initialize();\n  });\n\n  afterEach(async () => {\n    try {\n      await fs.rm(testDir, { recursive: true, force: true });\n    } catch {}\n  });\n\n  describe('createGoal', () => {\n    it('should create a goal with unique ID', async () => {\n      const goal1 = await storage.createGoal('Goal 1');\n      const goal2 = await storage.createGoal('Goal 2');\n      expect(goal1.id).not.toBe(goal2.id);\n    });\n\n    it('should persist goal to storage', async () => {\n      const goal = await storage.createGoal('Test Goal');\n      const retrieved = await storage.getGoal(goal.id);\n      expect(retrieved).toEqual(goal);\n    });\n  });\n\n  describe('addTodo', () => {\n    it('should add todo to plan', async () => {\n      const goal = await storage.createGoal('Test');\n      await storage.createPlan(goal.id);\n      const todo = await storage.addTodo(goal.id, {\n        title: 'Task 1',\n        description: 'Do something',\n        complexity: 5\n      });\n      expect(todo.id).toBeDefined();\n      expect(todo.title).toBe('Task 1');\n    });\n\n    it('should throw error if plan does not exist', async () => {\n      await expect(\n        storage.addTodo('nonexistent', { title: 'Task', description: 'Desc', complexity: 5 })\n      ).rejects.toThrow('No plan found');\n    });\n  });\n\n  // Add more tests for updateTodoStatus, removeTodo, etc.\n});",
+      "tests": [
+        "Create storage tests for all CRUD operations",
+        "Create prompts tests for formatPlanAsTodos",
+        "Create integration tests for MCP tool handlers",
+        "Aim for >80% code coverage"
+      ],
+      "commands": [
+        "pnpm add -D vitest @vitest/ui",
+        "# Create vitest.config.ts and test files",
+        "pnpm test"
+      ],
+      "dependsOn": ["FX-013"],
+      "acceptance": [
+        "Test suite runs successfully",
+        "Coverage >70% for critical paths",
+        "CI can run tests automatically",
+        "Tests are maintainable and clear"
+      ],
+      "provenance": ["SRC-003"]
+    },
+    {
+      "id": "FX-013",
+      "order": 13,
+      "severity": "MEDIUM",
+      "confidence": 100,
+      "tags": ["CONFIG", "DX"],
+      "file": "src/storage.ts",
+      "lines": [12],
+      "title": "Make storage path configurable via environment variable",
+      "description": "Storage path is hardcoded to ~/.software-planning-tool. Cannot customize for testing, multi-tenant, or containers.",
+      "patch": "constructor() {\n  // Allow override via environment variable for testing and flexibility\n  const defaultDir = path.join(os.homedir(), '.software-planning-tool');\n  const dataDir = process.env.STORAGE_PATH || defaultDir;\n  this.storagePath = path.join(dataDir, 'data.json');\n  this.data = {\n    goals: {},\n    plans: {},\n  };\n}\n\n// Update .env.example:\n# STORAGE_PATH=/custom/path/to/storage\n# If not set, defaults to ~/.software-planning-tool",
+      "tests": [
+        "Set STORAGE_PATH env var and verify data is stored there",
+        "Unset STORAGE_PATH and verify default location is used",
+        "Test with relative and absolute paths"
+      ],
+      "commands": [
+        "pnpm run build",
+        "STORAGE_PATH=/tmp/test-storage node build/index.js"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "STORAGE_PATH env var is respected",
+        "Default behavior unchanged when not set",
+        "Documented in .env.example",
+        "Tests can use isolated storage"
+      ],
+      "provenance": []
+    },
+    {
+      "id": "FX-015",
+      "order": 14,
+      "severity": "LOW",
+      "confidence": 90,
+      "tags": ["PERFORMANCE"],
+      "file": "src/storage.ts",
+      "lines": [36],
+      "title": "Implement debounced writes to reduce I/O",
+      "description": "Every storage mutation writes entire file to disk immediately. High-frequency operations cause I/O bottleneck.",
+      "patch": "private saveDebounceTimer: NodeJS.Timeout | null = null;\nprivate readonly SAVE_DEBOUNCE_MS = 1000;  // 1 second\n\nprivate async save(): Promise<void> {\n  // Debounce: accumulate changes and save after delay\n  if (this.saveDebounceTimer) {\n    clearTimeout(this.saveDebounceTimer);\n  }\n  \n  this.saveDebounceTimer = setTimeout(async () => {\n    try {\n      await fs.writeFile(this.storagePath, JSON.stringify(this.data, null, 2));\n      this.saveDebounceTimer = null;\n    } catch (error: any) {\n      console.error('[Storage] Save failed:', error.message);\n      throw new Error(`Storage save failed: ${error.message}`);\n    }\n  }, this.SAVE_DEBOUNCE_MS);\n}\n\nasync flush(): Promise<void> {\n  // Force immediate save (e.g., on shutdown)\n  if (this.saveDebounceTimer) {\n    clearTimeout(this.saveDebounceTimer);\n  }\n  await fs.writeFile(this.storagePath, JSON.stringify(this.data, null, 2));\n}\n\n// Add shutdown handler in index.ts:\nprocess.on('SIGINT', async () => {\n  await storage.flush();\n  process.exit(0);\n});",
+      "tests": [
+        "Verify multiple rapid saves only write once",
+        "Test flush() forces immediate write",
+        "Verify shutdown handler calls flush"
+      ],
+      "commands": [
+        "pnpm run build"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "Rapid operations don't cause excessive I/O",
+        "Data is eventually consistent within 1 second",
+        "Shutdown saves pending changes",
+        "Performance improvement measurable"
+      ],
+      "provenance": [],
+      "deferReason": "Performance optimization, not critical for v0.1.0. Defer to v0.2.0."
+    },
+    {
+      "id": "FX-016",
+      "order": 15,
+      "severity": "LOW",
+      "confidence": 75,
+      "tags": ["PERFORMANCE"],
+      "file": "src/prompts.ts",
+      "lines": [73, 92],
+      "title": "Optimize plan parsing performance",
+      "description": "Regex operations run multiple times per section. Slow for large plans (>100 sections).",
+      "patch": "// Pre-compile regex patterns\nconst COMPLEXITY_PATTERN = /Complexity:\\s*([0-9]+)/;\nconst CODE_BLOCK_PATTERN = /```[^`]*```/;\nconst NUMBERED_LIST = /^[0-9]+[\\.\\)]\\s*/;\n\nexport const formatPlanAsTodos = (plan: string): Array<...> => {\n  // Single pass parsing instead of multiple regex operations\n  const sections = plan.split('\\n\\n').filter(s => s.trim().length > 0);\n  \n  return sections.map(section => {\n    const lines = section.split('\\n');\n    const title = lines[0].replace(NUMBERED_LIST, '').trim();\n    \n    // Single pass through section text\n    let complexity = 5;\n    let codeExample: string | undefined;\n    \n    const complexityMatch = COMPLEXITY_PATTERN.exec(section);\n    if (complexityMatch) {\n      complexity = parseInt(complexityMatch[1]);\n    }\n    \n    const codeMatch = CODE_BLOCK_PATTERN.exec(section);\n    if (codeMatch) {\n      codeExample = codeMatch[0].replace(/^```|```$/g, '');\n    }\n    \n    const description = section\n      .replace(lines[0], '')\n      .replace(COMPLEXITY_PATTERN, '')\n      .replace(CODE_BLOCK_PATTERN, '')\n      .trim();\n    \n    return { title, description, complexity, codeExample };\n  });\n};",
+      "tests": [
+        "Benchmark parsing 100 section plan",
+        "Compare performance before/after",
+        "Verify output unchanged"
+      ],
+      "commands": [
+        "pnpm run build",
+        "# Create large test plan and benchmark"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "Parsing time reduced by >30%",
+        "Large plans parse without timeout",
+        "Output unchanged from original"
+      ],
+      "provenance": [],
+      "deferReason": "Micro-optimization. Only necessary if users report performance issues with large plans."
+    },
+    {
+      "id": "FX-017",
+      "order": 16,
+      "severity": "LOW",
+      "confidence": 70,
+      "tags": ["SECURITY"],
+      "file": "src/index.ts",
+      "lines": ["*"],
+      "title": "Add rate limiting to prevent DoS",
+      "description": "No rate limiting on tool calls. Malicious or buggy client could spam operations and fill disk.",
+      "patch": "// Simple token bucket rate limiter\nclass RateLimiter {\n  private tokens: number;\n  private readonly maxTokens: number;\n  private readonly refillRate: number;\n  private lastRefill: number;\n\n  constructor(maxTokens: number, refillPerSecond: number) {\n    this.maxTokens = maxTokens;\n    this.tokens = maxTokens;\n    this.refillRate = refillPerSecond;\n    this.lastRefill = Date.now();\n  }\n\n  consume(): boolean {\n    this.refill();\n    if (this.tokens >= 1) {\n      this.tokens -= 1;\n      return true;\n    }\n    return false;\n  }\n\n  private refill(): void {\n    const now = Date.now();\n    const elapsed = (now - this.lastRefill) / 1000;\n    this.tokens = Math.min(this.maxTokens, this.tokens + elapsed * this.refillRate);\n    this.lastRefill = now;\n  }\n}\n\n// In SoftwarePlanningServer:\nprivate rateLimiter = new RateLimiter(100, 10);  // 100 tokens, refill 10/sec\n\n// In CallToolRequestSchema handler:\nif (!this.rateLimiter.consume()) {\n  throw new McpError(ErrorCode.InternalError, 'Rate limit exceeded. Please slow down.');\n}",
+      "tests": [
+        "Spam requests and verify rate limit triggers",
+        "Test refill rate works correctly",
+        "Verify normal usage not affected"
+      ],
+      "commands": [
+        "pnpm run build"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "Excessive requests are throttled",
+        "Normal usage unaffected",
+        "Clear error message on rate limit"
+      ],
+      "provenance": [],
+      "deferReason": "Low risk in MCP context (trusted clients). Consider for public-facing deployments."
+    },
+    {
+      "id": "FX-019",
+      "order": 17,
+      "severity": "MEDIUM",
+      "confidence": 90,
+      "tags": ["DESIGN"],
+      "file": "src/index.ts",
+      "lines": ["*"],
+      "title": "Decouple business logic from MCP protocol layer",
+      "description": "Business logic is tightly coupled to MCP request handlers. Difficult to test independently or port to other protocols.",
+      "patch": "// Create service layer: src/services/PlanningService.ts\n\nexport class PlanningService {\n  constructor(private storage: Storage) {}\n\n  async startPlanning(goal: string): Promise<{ goal: Goal; plan: ImplementationPlan }> {\n    // Validation and business logic here\n    const trimmedGoal = goal?.trim();\n    if (!trimmedGoal || trimmedGoal.length === 0) {\n      throw new Error('Goal cannot be empty');\n    }\n    if (trimmedGoal.length > 500) {\n      throw new Error('Goal too long (max 500 characters)');\n    }\n\n    const createdGoal = await this.storage.createGoal(trimmedGoal);\n    const plan = await this.storage.createPlan(createdGoal.id);\n    \n    return { goal: createdGoal, plan };\n  }\n\n  async addTodo(goalId: string, todo: Omit<Todo, ...>): Promise<Todo> {\n    // Validation here\n    return await this.storage.addTodo(goalId, todo);\n  }\n\n  // ... other business methods\n}\n\n// In index.ts, handlers become thin:\ncase 'start_planning': {\n  try {\n    const { goal, plan } = await this.planningService.startPlanning(args.goal);\n    this.currentGoal = goal;\n    return { content: [{ type: 'text', text: SEQUENTIAL_THINKING_PROMPT }] };\n  } catch (error) {\n    throw new McpError(ErrorCode.InvalidParams, error.message);\n  }\n}",
+      "tests": [
+        "Test PlanningService independently without MCP",
+        "Verify handlers delegate correctly",
+        "Test error mapping from service to MCP errors"
+      ],
+      "commands": [
+        "# Create src/services/PlanningService.ts",
+        "pnpm run build",
+        "pnpm test"
+      ],
+      "dependsOn": ["FX-012"],
+      "acceptance": [
+        "Business logic is testable without MCP",
+        "Handlers are thin adapters",
+        "Could port to HTTP API with minimal changes"
+      ],
+      "provenance": []
+    },
+    {
+      "id": "FX-020",
+      "order": 18,
+      "severity": "MEDIUM",
+      "confidence": 85,
+      "tags": ["TESTING", "DESIGN"],
+      "file": "src/storage.ts",
+      "lines": [132],
+      "title": "Remove singleton pattern to enable dependency injection",
+      "description": "Global singleton prevents dependency injection and makes testing difficult. Tests interfere with each other.",
+      "patch": "// In storage.ts:\n- export const storage = new Storage();\n+ // Remove singleton export\n\n// In index.ts:\nimport { Storage } from './storage.js';\n\nclass SoftwarePlanningServer {\n  private server: Server;\n  private storage: Storage;\n  private currentGoal: Goal | null = null;\n\n  constructor(storage?: Storage) {\n    this.storage = storage || new Storage();  // Allow injection for testing\n    // ... rest of constructor\n  }\n}\n\n// At bottom of index.ts:\nconst storage = new Storage();\nconst server = new SoftwarePlanningServer(storage);\nserver.run().catch(console.error);\n\n// In tests:\nimport { Storage } from './storage';\nimport { SoftwarePlanningServer } from './index';\n\ndescribe('SoftwarePlanningServer', () => {\n  let mockStorage: Storage;\n  let server: SoftwarePlanningServer;\n\n  beforeEach(() => {\n    mockStorage = new Storage();  // Or use a mock\n    server = new SoftwarePlanningServer(mockStorage);\n  });\n\n  // Tests can now use isolated storage\n});",
+      "tests": [
+        "Verify server can be instantiated with custom storage",
+        "Test with mock storage",
+        "Verify default behavior unchanged"
+      ],
+      "commands": [
+        "pnpm run build",
+        "pnpm test"
+      ],
+      "dependsOn": ["FX-012"],
+      "acceptance": [
+        "Storage can be injected into server",
+        "Tests can use isolated storage instances",
+        "Default behavior unchanged when no storage provided"
+      ],
+      "provenance": []
+    },
+    {
+      "id": "FX-INIT",
+      "order": 19,
+      "severity": "HIGH",
+      "confidence": 90,
+      "tags": ["RELIABILITY"],
+      "file": "src/storage.ts",
+      "lines": [29, 32],
+      "title": "Add proper error handling to storage initialization",
+      "description": "Storage initialization catch block doesn't differentiate between expected 'file not found' and critical errors like permission denied or disk full.",
+      "patch": "async initialize(): Promise<void> {\n  try {\n    const dataDir = path.dirname(this.storagePath);\n    await fs.mkdir(dataDir, { recursive: true });\n\n    const data = await fs.readFile(this.storagePath, 'utf-8');\n    this.data = JSON.parse(data);\n  } catch (error: any) {\n    // ENOENT means file doesn't exist yet - this is expected on first run\n    if (error.code === 'ENOENT') {\n      console.error('[Storage] No existing data file, creating new storage');\n      await this.save();\n      return;\n    }\n    \n    // EACCES means permission denied - critical error\n    if (error.code === 'EACCES') {\n      console.error('[Storage] Permission denied accessing storage:', this.storagePath);\n      throw new Error(`Cannot access storage location: permission denied. Check permissions for ${this.storagePath}`);\n    }\n    \n    // JSON parse error - corrupted data\n    if (error instanceof SyntaxError) {\n      console.error('[Storage] Corrupted storage file, backing up and creating new');\n      const backupPath = `${this.storagePath}.backup.${Date.now()}`;\n      try {\n        await fs.rename(this.storagePath, backupPath);\n        console.error(`[Storage] Backup created at: ${backupPath}`);\n      } catch {}\n      await this.save();\n      return;\n    }\n    \n    // Other errors - log and re-throw\n    console.error('[Storage] Initialization failed:', error);\n    throw new Error(`Storage initialization failed: ${error.message}`);\n  }\n}",
+      "tests": [
+        "Test first run (ENOENT) creates new storage",
+        "Test permission error throws with clear message",
+        "Test corrupted JSON creates backup and starts fresh",
+        "Test other errors propagate with context"
+      ],
+      "commands": [
+        "pnpm run build",
+        "# Test permission error:",
+        "mkdir /tmp/test-storage && chmod 000 /tmp/test-storage",
+        "STORAGE_PATH=/tmp/test-storage node build/index.js"
+      ],
+      "dependsOn": [],
+      "acceptance": [
+        "First run initializes cleanly",
+        "Permission errors fail fast with clear guidance",
+        "Corrupted data is backed up automatically",
+        "Error messages are actionable"
+      ],
+      "provenance": []
+    },
+    {
+      "id": "FX-CI",
+      "order": 20,
+      "severity": "MEDIUM",
+      "confidence": 95,
+      "tags": ["BUILD", "DX"],
+      "file": ".github/workflows/ci.yml",
+      "lines": [],
+      "title": "Add CI/CD pipeline with GitHub Actions",
+      "description": "No continuous integration exists. Changes are not automatically tested before merge.",
+      "patch": "# Create .github/workflows/ci.yml:\n\nname: CI\n\non:\n  push:\n    branches: [ main ]\n  pull_request:\n    branches: [ main ]\n\njobs:\n  test:\n    runs-on: ubuntu-latest\n    \n    strategy:\n      matrix:\n        node-version: [18.x, 20.x, 22.x]\n    \n    steps:\n    - uses: actions/checkout@v4\n    \n    - name: Setup Node.js ${{ matrix.node-version }}\n      uses: actions/setup-node@v4\n      with:\n        node-version: ${{ matrix.node-version }}\n    \n    - uses: pnpm/action-setup@v2\n      with:\n        version: 8\n    \n    - name: Install dependencies\n      run: pnpm install --frozen-lockfile\n    \n    - name: Run linter\n      run: pnpm lint\n    \n    - name: Run type check\n      run: pnpm run build\n    \n    - name: Run tests\n      run: pnpm test\n    \n    - name: Upload coverage\n      uses: codecov/codecov-action@v3\n      if: matrix.node-version == '20.x'\n      with:\n        files: ./coverage/coverage-final.json\n\n  build:\n    runs-on: ubuntu-latest\n    needs: test\n    \n    steps:\n    - uses: actions/checkout@v4\n    \n    - name: Setup Node.js\n      uses: actions/setup-node@v4\n      with:\n        node-version: '20.x'\n    \n    - uses: pnpm/action-setup@v2\n      with:\n        version: 8\n    \n    - name: Install and build\n      run: |\n        pnpm install --frozen-lockfile\n        pnpm run build\n    \n    - name: Upload artifacts\n      uses: actions/upload-artifact@v3\n      with:\n        name: build\n        path: build/",
+      "tests": [
+        "Push to branch and verify CI runs",
+        "Create PR and verify checks pass",
+        "Break tests and verify CI fails"
+      ],
+      "commands": [
+        "mkdir -p .github/workflows",
+        "# Create ci.yml file",
+        "git add .github/workflows/ci.yml",
+        "git commit -m 'Add CI pipeline'",
+        "git push"
+      ],
+      "dependsOn": ["FX-012"],
+      "acceptance": [
+        "CI runs on every push and PR",
+        "Tests run on multiple Node versions",
+        "Failed tests block merges",
+        "Coverage reports generated"
+      ],
+      "provenance": []
+    }
+  ],
+  "deferredIssues": [
+    "FX-008: Concurrency control (defer to v0.2.0 - single user scenario)",
+    "FX-010: Full structured logging with pino (defer to v0.2.0 - minimal logging sufficient for v0.1.0)",
+    "FX-015: Debounced writes (defer to v0.2.0 - performance optimization)",
+    "FX-016: Plan parsing performance (defer to v0.2.0 - micro-optimization)",
+    "FX-017: Rate limiting (defer to v0.2.0 - low risk in MCP context)"
+  ],
+  "executionNotes": "Execute fixes in order. Items with dependsOn must wait for dependencies. Test after each fix. Commit working changes before proceeding to next fix."
+}
