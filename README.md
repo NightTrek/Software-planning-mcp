@@ -1,5 +1,5 @@
 # Software Planning Tool 🚀
-[![smithery badge](https://smithery.ai/badge/@NightTrek/Software-planning-mcp)](https://smithery.ai/server/@NightTrek/Software-planning-mcp)
+[![LightNow capabilities](https://lightnow.ai/badge/io.github.NightTrek/software-planning-mcp)](https://lightnow.ai/servers/io.github.NightTrek/software-planning-mcp)
 
 A Model Context Protocol (MCP) server designed to facilitate software development planning through an interactive, structured approach. This tool helps break down complex software projects into manageable tasks, track implementation progress, and maintain detailed development plans.
 
