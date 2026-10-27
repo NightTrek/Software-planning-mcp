@@ -1,4 +1,8 @@
-# Software Planning Tool 🚀
+# Software Planning Tool 🚀 (Deprecated)
+
+> [!WARNING]
+> **Deprecated and no longer maintained.** The source and manual installation instructions remain available for reference.
+
 [![smithery badge](https://smithery.ai/badge/@NightTrek/Software-planning-mcp)](https://smithery.ai/server/@NightTrek/Software-planning-mcp)
 
 A Model Context Protocol (MCP) server designed to facilitate software development planning through an interactive, structured approach. This tool helps break down complex software projects into manageable tasks, track implementation progress, and maintain detailed development plans.
@@ -17,15 +21,9 @@ A Model Context Protocol (MCP) server designed to facilitate software developmen
 
 ## Installation 🛠️
 
-### Installing via Smithery
+For existing users who still need to run this unmaintained project, use the manual/local setup below rather than Smithery.
 
-To install Software Planning Tool for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@NightTrek/Software-planning-mcp):
-
-```bash
-npx -y @smithery/cli install @NightTrek/Software-planning-mcp --client claude
-```
-
-### Manual Installation
+### Manual / Local Installation
 1. Clone the repository
 2. Install dependencies:
 ```bash
@@ -50,6 +48,10 @@ pnpm run build
   }
 }
 ```
+
+### Smithery installation notice
+
+The previous Smithery CLI installation route is no longer recommended. Smithery is [shutting down its connection management services](https://www.smithery.ai/future) on **October 31, 2026** and deprecating its current CLI and SDK versions. Smithery remains a public, non-proxied MCP registry; use the manual/local setup above instead of the former Smithery install command.
 
 ## Available Tools 🔧
 
